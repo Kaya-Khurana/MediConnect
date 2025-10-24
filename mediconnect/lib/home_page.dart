@@ -8,8 +8,9 @@ import 'package:mediconnect/my_appointments_page.dart';
 import 'package:mediconnect/my_schedule_page.dart';
 import 'package:mediconnect/write_prescription_page.dart';
 import 'package:mediconnect/my_prescriptions_page.dart';
-import 'package:mediconnect/find_lab_page.dart'; // <-- Ensure this is imported
-import 'package:mediconnect/lab_dashboard_page.dart'; // <-- Import Lab Dashboard
+import 'package:mediconnect/find_lab_page.dart';
+import 'package:mediconnect/lab_dashboard_page.dart';
+import 'package:mediconnect/pending_approval_page.dart'; // <-- Import Pending Page
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -20,71 +21,108 @@ class HomePage extends StatelessWidget {
     final user = authService.currentUser;
 
     if (user == null) {
-      return const Scaffold(body: Center(child: Text("Error: Not logged in.")));
+      // AuthGate should handle this, but provide a fallback
+      return const Scaffold(body: Center(child: Text("Not logged in.")));
     }
 
+    // Use a top-level Scaffold for loading/error states before data fetch
     return Scaffold(
       body: FutureBuilder<DocumentSnapshot>(
         future:
             FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
         builder: (context, snapshot) {
+          // --- Handle Loading State ---
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Scaffold(
+                body: Center(child: CircularProgressIndicator()));
           }
+          // --- Handle Error State ---
           if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}"));
+            return Scaffold(
+                body: Center(
+                    child:
+                        Text("Error fetching user data: ${snapshot.error}")));
           }
+          // --- Handle Missing User Data State ---
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: Text("Could not find user data."));
+            print(
+                "Error: User document not found in Firestore for UID ${user.uid}");
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              authService.signOut();
+            });
+            return const Scaffold(
+                body: Center(
+                    child:
+                        Text("Error: User data missing. Please login again.")));
           }
 
+          // --- User Data Loaded Successfully ---
           Map<String, dynamic> userData =
               snapshot.data!.data() as Map<String, dynamic>;
           String role = userData['role'] ?? 'user';
           String name = userData['firstName'] ?? 'User';
+          // Default approved to false if field is missing, except for patients
+          bool isApproved = userData['isApproved'] ?? (role == 'patient');
 
-          Widget dashboardBody;
-          if (role == 'admin') {
-            dashboardBody = AdminDashboard(adminUid: user.uid);
+          // --- Determine which page content to show ---
+          Widget pageToShow;
+          String appBarTitle;
+          bool showLogout = true; // Show logout by default
+          bool showBackButton = false; // Don't show back on main dashboards
+
+          // 1. Check if approval is required and pending
+          if (!isApproved &&
+              (role == 'pending_doctor' ||
+                  role == 'pending_lab' ||
+                  role == 'doctor' ||
+                  role == 'lab')) {
+            pageToShow = const PendingApprovalPage();
+            appBarTitle = 'Account Pending';
+            showLogout = false; // Pending page has its own logout
+            showBackButton = false;
           }
-          // --- Check for Lab role ---
-          else if (role == 'lab') {
-            dashboardBody = LabDashboardPage(); // Show the new lab dashboard
-          }
-          // --- End Lab Check ---
-          else {
-            // Patient or Doctor
-            dashboardBody = _buildPatientDoctorDashboard(context, name, role);
+          // 2. Check for specific roles if approved
+          else if (role == 'admin') {
+            pageToShow = AdminDashboard(adminUid: user.uid);
+            appBarTitle = 'Admin Portal';
+          } else if (role == 'lab') {
+            pageToShow = LabDashboardPage();
+            appBarTitle = 'Lab Dashboard';
+          } else {
+            // Doctor (approved) or Patient
+            pageToShow = _buildPatientDoctorDashboard(context, name, role);
+            appBarTitle =
+                (role == 'doctor') ? 'Doctor Dashboard' : 'MediConnect';
           }
 
+          // Build the final Scaffold with the correct AppBar and Body
           return Scaffold(
             appBar: AppBar(
               backgroundColor: Theme.of(context).primaryColor,
               foregroundColor: Colors.white,
-              title: Text(role == 'admin'
-                  ? 'Admin Portal'
-                  : (role == 'lab' // <-- Add Lab title
-                      ? 'Lab Dashboard'
-                      : (role == 'doctor'
-                          ? 'Doctor Dashboard'
-                          : 'MediConnect'))),
+              title: Text(appBarTitle),
+              automaticallyImplyLeading: showBackButton, // Control back arrow
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.logout, color: Colors.white),
-                  onPressed: () {
-                    authService.signOut();
-                  },
-                )
+                if (showLogout) // Only show if not pending page
+                  IconButton(
+                    icon: const Icon(Icons.logout, color: Colors.white),
+                    tooltip: 'Logout',
+                    onPressed: () {
+                      authService.signOut();
+                    },
+                  )
               ],
             ),
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            body: dashboardBody,
+            body: pageToShow, // Use the determined page widget
           );
+          // --- END OF UPDATED LOGIC ---
         },
       ),
     );
   }
 
+  // --- This function builds the Patient and Doctor Dashboards ---
   Widget _buildPatientDoctorDashboard(
       BuildContext context, String name, String role) {
     final List<Map<String, dynamic>> actions;
@@ -137,7 +175,7 @@ class HomePage extends StatelessWidget {
           'subtitle': 'Find nearby labs',
           'icon': Icons.biotech_outlined,
           'color': Colors.orange,
-        }, // Updated Card
+        },
         {
           'title': 'Prescriptions',
           'subtitle': 'View your e-scripts',
@@ -197,7 +235,6 @@ class HomePage extends StatelessWidget {
                       subtitle: action['subtitle'],
                       icon: action['icon'],
                       color: action['color'],
-                      // --- THIS IS THE UPDATED onTap FUNCTION ---
                       onTap: () {
                         // --- Patient Navigation ---
                         if (action['title'] == 'Find a Doctor') {
@@ -218,17 +255,13 @@ class HomePage extends StatelessWidget {
                             MaterialPageRoute(
                                 builder: (context) => MyPrescriptionsPage()),
                           );
-                        }
-                        // --- Link Find Lab Page ---
-                        else if (action['title'] == 'Book Lab Test') {
+                        } else if (action['title'] == 'Book Lab Test') {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                                 builder: (context) => const FindLabPage()),
                           );
                         }
-                        // --- END OF Link ---
-
                         // --- Doctor Navigation ---
                         else if (action['title'] == 'Appointment Requests') {
                           Navigator.push(
@@ -251,8 +284,7 @@ class HomePage extends StatelessWidget {
                                     const WritePrescriptionPage()),
                           );
                         }
-
-                        // --- Placeholder for other buttons ---
+                        // --- Placeholder ---
                         else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -261,7 +293,6 @@ class HomePage extends StatelessWidget {
                           );
                         }
                       },
-                      // --- END OF UPDATE ---
                     );
                   },
                 ),
@@ -273,6 +304,7 @@ class HomePage extends StatelessWidget {
     );
   }
 
+  // --- Action Card Widget (No changes needed) ---
   Widget _buildActionCard(
     BuildContext context, {
     required String title,

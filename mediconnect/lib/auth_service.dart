@@ -20,23 +20,24 @@ class AuthService {
       );
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      print('Login Error: ${e.message}'); // Added context
+      print('Login Error: ${e.message}');
       return null;
     } catch (e) {
-      print('General Login Error: $e'); // Added context
+      print('General Login Error: $e');
       return null;
     }
   }
 
-  // --- UPDATED SIGN UP METHOD for Lab Role ---
+  // --- UPDATED SIGN UP METHOD for Pending Approval ---
   Future<UserCredential?> signUpWithEmail(
     String email,
     String password,
-    String firstName, // For lab, this is contact person's first name
-    String lastName, // For lab, this is contact person's last name
-    String role, {
+    String firstName,
+    String lastName,
+    String selectedRole, // Role selected by user (patient, doctor, lab)
+    {
     Map<String, dynamic>? doctorData,
-    Map<String, dynamic>? labData, // --- NEW: Lab specific data ---
+    Map<String, dynamic>? labData,
   }) async {
     try {
       // 1. Create the user in Firebase Auth
@@ -49,34 +50,52 @@ class AuthService {
       User? user = userCredential.user;
 
       if (user != null) {
+        // --- Determine initial role and approval status ---
+        String finalRole;
+        bool isApproved = true; // Patients are approved by default
+
+        if (selectedRole == 'doctor') {
+          finalRole = 'pending_doctor';
+          isApproved = false;
+        } else if (selectedRole == 'lab') {
+          finalRole = 'pending_lab';
+          isApproved = false;
+        } else {
+          finalRole = 'patient'; // Default to patient
+        }
+        // --- End Role/Approval Logic ---
+
         // 2. Create user document (common for all roles)
         await _firestore.collection('users').doc(user.uid).set({
           'email': email,
-          'firstName': firstName, // Contact person first name
-          'lastName': lastName, // Contact person last name
-          'role': role,
+          'firstName': firstName,
+          'lastName': lastName,
+          'role': finalRole, // <-- Use the determined role
+          'isApproved': isApproved, // <-- Add the approval flag
           'createdAt': FieldValue.serverTimestamp(),
         });
 
-        // 3. If Doctor, create doctor profile
-        if (role == 'doctor' && doctorData != null) {
+        // --- 3. Save Profile Data ---
+        // If Doctor, create doctor profile
+        if (selectedRole == 'doctor' && doctorData != null) {
           doctorData['firstName'] = firstName;
           doctorData['lastName'] = lastName;
           doctorData['email'] = email;
+          // Optionally add an 'approvalStatus': 'pending' field here too
           await _firestore
               .collection('doctorProfiles')
               .doc(user.uid)
               .set(doctorData);
         }
-        // 4. If Lab, create lab profile
-        else if (role == 'lab' && labData != null) {
-          labData['contactFirstName'] = firstName; // Store contact person name
+        // If Lab, create lab profile
+        else if (selectedRole == 'lab' && labData != null) {
+          labData['contactFirstName'] = firstName;
           labData['contactLastName'] = lastName;
-          labData['email'] = email; // Store contact email
-          // Ensure lab name and address are included from labData
+          labData['email'] = email;
+          // Optionally add an 'approvalStatus': 'pending' field here too
           await _firestore.collection('labProfiles').doc(user.uid).set(labData);
         }
-        // --- End of Lab Profile creation ---
+        // --- End Profile Saving ---
       }
       return userCredential;
     } on FirebaseAuthException catch (e) {
