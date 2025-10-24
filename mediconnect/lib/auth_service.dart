@@ -20,19 +20,23 @@ class AuthService {
       );
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      print(e.message);
+      print('Login Error: ${e.message}'); // Added context
+      return null;
+    } catch (e) {
+      print('General Login Error: $e'); // Added context
       return null;
     }
   }
 
-  // --- UPDATED SIGN UP METHOD ---
+  // --- UPDATED SIGN UP METHOD for Lab Role ---
   Future<UserCredential?> signUpWithEmail(
     String email,
     String password,
-    String firstName,
-    String lastName,
+    String firstName, // For lab, this is contact person's first name
+    String lastName, // For lab, this is contact person's last name
     String role, {
-    Map<String, dynamic>? doctorData, // Make doctor data optional
+    Map<String, dynamic>? doctorData,
+    Map<String, dynamic>? labData, // --- NEW: Lab specific data ---
   }) async {
     try {
       // 1. Create the user in Firebase Auth
@@ -45,31 +49,41 @@ class AuthService {
       User? user = userCredential.user;
 
       if (user != null) {
-        // 2. Create a document in the 'users' collection for everyone
+        // 2. Create user document (common for all roles)
         await _firestore.collection('users').doc(user.uid).set({
           'email': email,
-          'firstName': firstName,
-          'lastName': lastName,
+          'firstName': firstName, // Contact person first name
+          'lastName': lastName, // Contact person last name
           'role': role,
           'createdAt': FieldValue.serverTimestamp(),
         });
 
-        // 3. --- NEW: If the user is a doctor, create a profile document ---
+        // 3. If Doctor, create doctor profile
         if (role == 'doctor' && doctorData != null) {
-          // Add user's name to the profile data before saving
           doctorData['firstName'] = firstName;
           doctorData['lastName'] = lastName;
-          doctorData['email'] = email; // Store email for easy lookup
-
+          doctorData['email'] = email;
           await _firestore
               .collection('doctorProfiles')
               .doc(user.uid)
               .set(doctorData);
         }
+        // 4. If Lab, create lab profile
+        else if (role == 'lab' && labData != null) {
+          labData['contactFirstName'] = firstName; // Store contact person name
+          labData['contactLastName'] = lastName;
+          labData['email'] = email; // Store contact email
+          // Ensure lab name and address are included from labData
+          await _firestore.collection('labProfiles').doc(user.uid).set(labData);
+        }
+        // --- End of Lab Profile creation ---
       }
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      print(e.message);
+      print('Signup Error: ${e.message}');
+      return null;
+    } catch (e) {
+      print('General Signup Error: $e');
       return null;
     }
   }

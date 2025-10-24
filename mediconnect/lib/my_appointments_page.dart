@@ -1,3 +1,4 @@
+// lib/my_appointments_page.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:mediconnect/auth_service.dart';
@@ -9,7 +10,7 @@ class MyAppointmentsPage extends StatelessWidget {
   final AuthService _authService = AuthService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Helper widget to show the status
+  // Helper widget to show the status chip (No change needed)
   Widget _buildStatusChip(String status) {
     Color chipColor;
     String statusText;
@@ -36,7 +37,7 @@ class MyAppointmentsPage extends StatelessWidget {
         statusText = 'Unknown';
         iconData = Icons.help_outline;
     }
-
+    // ... (rest of _buildStatusChip code remains the same)
     return Chip(
       avatar: Icon(iconData, color: Colors.white, size: 18),
       label: Text(
@@ -45,6 +46,10 @@ class MyAppointmentsPage extends StatelessWidget {
             const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
       ),
       backgroundColor: chipColor,
+      padding: const EdgeInsets.symmetric(
+          horizontal: 6, vertical: 2), // Adjust padding
+      labelPadding:
+          const EdgeInsets.only(left: 2, right: 4), // Adjust label padding
     );
   }
 
@@ -56,93 +61,178 @@ class MyAppointmentsPage extends StatelessWidget {
           body: Center(child: Text('You must be logged in.')));
     }
 
+    // --- Stream for Doctor Appointments ---
+    final doctorAppointmentsStream = _firestore
+        .collection('appointments')
+        .where('patientId', isEqualTo: user.uid)
+        .snapshots();
+
+    // --- Stream for Lab Test Bookings ---
+    final labTestsStream = _firestore
+        .collection('labTestBookings')
+        .where('patientId', isEqualTo: user.uid)
+        .snapshots();
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Appointments'),
+        title: const Text('My Bookings'), // Renamed AppBar
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // Query for appointments for THIS patient
-        stream: _firestore
-            .collection('appointments')
-            .where('patientId', isEqualTo: user.uid) // Show newest first
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text(
-                'You have no appointments.',
-                style: TextStyle(fontSize: 18, color: Colors.grey),
-              ),
-            );
-          }
+        stream: doctorAppointmentsStream,
+        builder: (context, doctorSnapshot) {
+          // --- Also listen to the Lab Test stream ---
+          return StreamBuilder<QuerySnapshot>(
+            stream: labTestsStream,
+            builder: (context, labSnapshot) {
+              // --- Handle Loading States ---
+              if (doctorSnapshot.connectionState == ConnectionState.waiting ||
+                  labSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          final appointments = snapshot.data!.docs;
+              // --- Handle Errors ---
+              if (doctorSnapshot.hasError || labSnapshot.hasError) {
+                // Check for index errors specifically if needed
+                if (doctorSnapshot.error.toString().contains('index') ||
+                    labSnapshot.error.toString().contains('index')) {
+                  // Display index error message
+                  return const Center(/* ... Index Error Message ... */);
+                }
+                return Center(
+                    child: Text(
+                        'Error: ${doctorSnapshot.error ?? labSnapshot.error}'));
+              }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: appointments.length,
-            itemBuilder: (context, index) {
-              final doc = appointments[index];
-              final data = doc.data() as Map<String, dynamic>;
+              // --- Combine and Sort Data ---
+              List<QueryDocumentSnapshot> combinedList = [];
+              if (doctorSnapshot.hasData) {
+                combinedList.addAll(doctorSnapshot.data!.docs);
+              }
+              if (labSnapshot.hasData) {
+                combinedList.addAll(labSnapshot.data!.docs);
+              }
 
-              final doctorName = data['doctorName'];
-              final reason = data['reason'];
-              final status = data['status'];
-              final time = (data['appointmentTime'] as Timestamp).toDate();
-              final formattedTime =
-                  DateFormat('EEE, MMM d, yyyy  at  h:mm a').format(time);
+              if (combinedList.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'You have no bookings yet.',
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                );
+              }
 
-              return Card(
-                elevation: 4.0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                margin: const EdgeInsets.only(bottom: 16.0),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Sort the combined list by date
+              combinedList.sort((a, b) {
+                Timestamp timeA =
+                    (a.data() as Map<String, dynamic>)['appointmentTime'];
+                Timestamp timeB =
+                    (b.data() as Map<String, dynamic>)['appointmentTime'];
+                return timeB.compareTo(timeA); // Show newest first
+              });
+              // --- End Combine and Sort ---
+
+              // --- Build the List View ---
+              return ListView.builder(
+                padding: const EdgeInsets.all(16.0),
+                itemCount: combinedList.length,
+                itemBuilder: (context, index) {
+                  final doc = combinedList[index];
+                  final data = doc.data() as Map<String, dynamic>;
+
+                  // Determine if it's a doctor or lab booking
+                  bool isDoctorAppointment = data.containsKey('doctorId');
+                  bool isLabTest = data.containsKey('labId');
+
+                  // Extract common data
+                  final status = data['status'] ?? 'unknown';
+                  final time = (data['appointmentTime'] as Timestamp).toDate();
+                  final formattedTime =
+                      DateFormat('EEE, MMM d, yyyy  at  h:mm a').format(time);
+
+                  // Extract specific data
+                  String title;
+                  String subtitle;
+                  IconData leadingIcon;
+                  Color iconColor;
+
+                  if (isDoctorAppointment) {
+                    title = data['doctorName'] ?? 'Unknown Doctor';
+                    subtitle = 'Reason: ${data['reason'] ?? 'Not specified'}';
+                    leadingIcon = Icons.medical_services_outlined;
+                    iconColor =
+                        Colors.blue; // Or Theme.of(context).primaryColor
+                  } else if (isLabTest) {
+                    title = data['labName'] ?? 'Unknown Lab';
+                    subtitle = 'Test: ${data['testName'] ?? 'Not specified'}';
+                    leadingIcon = Icons.biotech_outlined;
+                    iconColor = Colors.orange;
+                  } else {
+                    // Fallback for unexpected data
+                    title = 'Unknown Booking';
+                    subtitle = 'Details unavailable';
+                    leadingIcon = Icons.help_outline;
+                    iconColor = Colors.grey;
+                  }
+
+                  // --- Display Card (Unified Look) ---
+                  return Card(
+                    elevation: 3.0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0)),
+                    margin: const EdgeInsets.only(bottom: 16.0),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Flexible(
-                            child: Text(
-                              doctorName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                // Icon indicating type
+                                radius: 20,
+                                backgroundColor: iconColor.withOpacity(0.15),
+                                child: Icon(leadingIcon,
+                                    color: iconColor, size: 22),
                               ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  title, // Doctor or Lab Name
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 17,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildStatusChip(status), // Status chip
+                            ],
+                          ),
+                          const Divider(height: 20),
+                          Text(
+                            formattedTime, // Date and Time
+                            style: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
                             ),
                           ),
-                          _buildStatusChip(status), // Our new status chip
+                          const SizedBox(height: 8),
+                          Text(
+                            subtitle, // Reason or Test Name
+                            style: TextStyle(
+                                fontSize: 14, color: Colors.grey[700]),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        formattedTime,
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const Divider(height: 20),
-                      Text(
-                        'Reason: $reason',
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
+              // --- End Build List View ---
             },
           );
         },

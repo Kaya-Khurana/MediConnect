@@ -7,7 +7,9 @@ import 'package:mediconnect/appointment_requests_page.dart';
 import 'package:mediconnect/my_appointments_page.dart';
 import 'package:mediconnect/my_schedule_page.dart';
 import 'package:mediconnect/write_prescription_page.dart';
-import 'package:mediconnect/my_prescriptions_page.dart'; // <-- Ensure this is imported
+import 'package:mediconnect/my_prescriptions_page.dart';
+import 'package:mediconnect/find_lab_page.dart'; // <-- Ensure this is imported
+import 'package:mediconnect/lab_dashboard_page.dart'; // <-- Import Lab Dashboard
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -44,7 +46,14 @@ class HomePage extends StatelessWidget {
           Widget dashboardBody;
           if (role == 'admin') {
             dashboardBody = AdminDashboard(adminUid: user.uid);
-          } else {
+          }
+          // --- Check for Lab role ---
+          else if (role == 'lab') {
+            dashboardBody = LabDashboardPage(); // Show the new lab dashboard
+          }
+          // --- End Lab Check ---
+          else {
+            // Patient or Doctor
             dashboardBody = _buildPatientDoctorDashboard(context, name, role);
           }
 
@@ -54,7 +63,11 @@ class HomePage extends StatelessWidget {
               foregroundColor: Colors.white,
               title: Text(role == 'admin'
                   ? 'Admin Portal'
-                  : (role == 'doctor' ? 'Doctor Dashboard' : 'MediConnect')),
+                  : (role == 'lab' // <-- Add Lab title
+                      ? 'Lab Dashboard'
+                      : (role == 'doctor'
+                          ? 'Doctor Dashboard'
+                          : 'MediConnect'))),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.logout, color: Colors.white),
@@ -120,11 +133,11 @@ class HomePage extends StatelessWidget {
           'color': Colors.purple,
         },
         {
-          'title': 'Medical Records',
-          'subtitle': 'View your history',
-          'icon': Icons.folder_shared_outlined,
+          'title': 'Book Lab Test',
+          'subtitle': 'Find nearby labs',
+          'icon': Icons.biotech_outlined,
           'color': Colors.orange,
-        },
+        }, // Updated Card
         {
           'title': 'Prescriptions',
           'subtitle': 'View your e-scripts',
@@ -199,13 +212,19 @@ class HomePage extends StatelessWidget {
                             MaterialPageRoute(
                                 builder: (context) => MyAppointmentsPage()),
                           );
-                        }
-                        // --- Link Prescriptions Page ---
-                        else if (action['title'] == 'Prescriptions') {
+                        } else if (action['title'] == 'Prescriptions') {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                                 builder: (context) => MyPrescriptionsPage()),
+                          );
+                        }
+                        // --- Link Find Lab Page ---
+                        else if (action['title'] == 'Book Lab Test') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const FindLabPage()),
                           );
                         }
                         // --- END OF Link ---
