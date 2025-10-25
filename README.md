@@ -4,7 +4,7 @@ MediConnect is a Flutter-based mobile application designed to streamline the pro
 
 
 ## ScreenShots
-<img width="400" height="600" alt="Screenshot_2025-10-25-23-05-24-30_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/57321cff-168e-4105-8c49-33c8e362ccc2" />
+<img width="300" height="600" alt="Screenshot_2025-10-25-23-05-24-30_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/57321cff-168e-4105-8c49-33c8e362ccc2" />
 
 <img width="1419" height="2796" alt="Screenshot_2025-10-25-22-53-35-15_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/a928a343-68f1-4668-97b0-82795a9dd653" />
 
