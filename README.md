@@ -6,15 +6,15 @@ MediConnect is a Flutter-based mobile application designed to streamline the pro
 ## ScreenShots
 <img width="300" height="600" alt="Screenshot_2025-10-25-23-05-24-30_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/57321cff-168e-4105-8c49-33c8e362ccc2" />
 
-<img width="1419" height="2796" alt="Screenshot_2025-10-25-22-53-35-15_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/a928a343-68f1-4668-97b0-82795a9dd653" />
+<img width="300" height="600" alt="Screenshot_2025-10-25-22-53-35-15_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/a928a343-68f1-4668-97b0-82795a9dd653" />
 
-<img width="1419" height="2796" alt="Screenshot_2025-10-25-22-53-51-54_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/5e408a83-ace2-4ce6-b473-a1aa36cc4a0b" />
+<img width="300" height="600" alt="Screenshot_2025-10-25-22-53-51-54_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/5e408a83-ace2-4ce6-b473-a1aa36cc4a0b" />
 
-<img width="1419" height="2796" alt="Screenshot_2025-10-25-22-53-55-45_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/0de346d3-ecf6-4716-bdfa-d1c64333c983" />
+<img width="300" height="600" alt="Screenshot_2025-10-25-22-53-55-45_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/0de346d3-ecf6-4716-bdfa-d1c64333c983" />
 
-<img width="1419" height="2796" alt="Screenshot_2025-10-25-22-54-06-50_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/106104e2-77bf-43d3-a532-0f22b2934832" />
+<img width="300" height="600" alt="Screenshot_2025-10-25-22-54-06-50_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/106104e2-77bf-43d3-a532-0f22b2934832" />
 
-<img width="1419" height="2796" alt="Screenshot_2025-10-25-22-54-02-57_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/03f1b1e6-dec5-433f-a801-01f17339ac70" />
+<img width="300" height="600" alt="Screenshot_2025-10-25-22-54-02-57_bed02b0cbfcf719fcf7d049b315cb6ac-portrait" src="https://github.com/user-attachments/assets/03f1b1e6-dec5-433f-a801-01f17339ac70" />
 
 ## ✨ Features
 
