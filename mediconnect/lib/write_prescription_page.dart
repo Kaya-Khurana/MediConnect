@@ -7,7 +7,6 @@ import 'package:mediconnect/auth_service.dart';
 class MedicationEntry {
   final TextEditingController medicationController = TextEditingController();
   final TextEditingController dosageController = TextEditingController();
-  // We can add notes per medication if needed, or keep one main notes field
 }
 
 class WritePrescriptionPage extends StatefulWidget {
@@ -23,28 +22,25 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   String? _selectedPatientId;
-  // --- NEW: List to hold multiple medication entries ---
-  final List<MedicationEntry> _medicationEntries = [
-    MedicationEntry()
-  ]; // Start with one
-  final TextEditingController _notesController =
-      TextEditingController(); // Keep one main notes field
+
+  // List to hold multiple medication entries
+  final List<MedicationEntry> _medicationEntries = [MedicationEntry()];
+
+  final TextEditingController _notesController = TextEditingController();
 
   bool _isLoading = false;
 
-  // --- NEW: Function to add a medication line ---
+  // Function to add a medication line
   void _addMedicationLine() {
     setState(() {
       _medicationEntries.add(MedicationEntry());
     });
   }
 
-  // --- NEW: Function to remove a medication line ---
+  // Function to remove a medication line
   void _removeMedicationLine(int index) {
-    // Prevent removing the last line
     if (_medicationEntries.length > 1) {
       setState(() {
-        // Dispose controllers before removing
         _medicationEntries[index].medicationController.dispose();
         _medicationEntries[index].dosageController.dispose();
         _medicationEntries.removeAt(index);
@@ -59,10 +55,10 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
     }
   }
 
-  // --- UPDATED: Function to Save the Prescription ---
+  // Function to Save the Prescription
   Future<void> _savePrescription() async {
     if (!_formKey.currentState!.validate()) {
-      return; // Validation will now check all medication fields
+      return;
     }
     if (_selectedPatientId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,19 +86,21 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
     });
 
     try {
+      // Fetch doctor's details
       final doctorDoc =
           await _firestore.collection('users').doc(doctorUser.uid).get();
       final doctorData = doctorDoc.data() as Map<String, dynamic>;
       final doctorName =
           'Dr. ${doctorData['firstName']} ${doctorData['lastName']}';
 
+      // Fetch patient's details
       final patientDoc =
           await _firestore.collection('users').doc(_selectedPatientId!).get();
       final patientData = patientDoc.data() as Map<String, dynamic>;
       final patientName =
           '${patientData['firstName']} ${patientData['lastName']}';
 
-      // --- NEW: Gather data from all medication entries ---
+      // Gather data from all medication entries
       List<Map<String, String>> medicationsList =
           _medicationEntries.map((entry) {
         return {
@@ -110,7 +108,6 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
           'dosage': entry.dosageController.text.trim(),
         };
       }).toList();
-      // --- End of new data gathering ---
 
       // Save to 'prescriptions' collection
       await _firestore.collection('prescriptions').add({
@@ -118,8 +115,8 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
         'doctorName': doctorName,
         'patientId': _selectedPatientId,
         'patientName': patientName,
-        'medications': medicationsList, // <-- Save the list here
-        'notes': _notesController.text.trim(), // Keep the overall notes
+        'medications': medicationsList,
+        'notes': _notesController.text.trim(),
         'issuedAt': FieldValue.serverTimestamp(),
       });
 
@@ -129,7 +126,7 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context); // Go back after saving
+      Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -146,7 +143,6 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
 
   @override
   void dispose() {
-    // Dispose all dynamic controllers
     for (var entry in _medicationEntries) {
       entry.medicationController.dispose();
       entry.dosageController.dispose();
@@ -170,30 +166,53 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // --- Patient Selector (no change) ---
+              // --- Patient Selector ---
               Text('Select Patient',
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
+
               StreamBuilder<QuerySnapshot>(
-                stream: _firestore
-                    .collection('users')
-                    .where('role', isEqualTo: 'patient')
-                    .snapshots(),
+                // --- FIXED QUERY: Simple fetch, manual sort ---
+                stream: _firestore.collection('users').snapshots(),
                 builder: (context, snapshot) {
-                  // ... (DropdownButtonFormField code remains the same) ...
-                  if (!snapshot.hasData)
-                    return const Center(child: CircularProgressIndicator());
-                  if (snapshot.hasError)
+                  if (snapshot.hasError) {
+                    // Print error to debug console
+                    print("Error fetching users: ${snapshot.error}");
                     return Text('Error: ${snapshot.error}');
-                  if (snapshot.data!.docs.isEmpty)
-                    return const Text('No patients found.');
+                  }
+
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Text('No users found in database.');
+                  }
+
+                  // Filter out the current doctor from the list
+                  final doctorUid = _authService.currentUser?.uid;
+                  final users = snapshot.data!.docs
+                      .where((doc) => doc.id != doctorUid)
+                      .toList();
+
+                  // Sort alphabetically in code (safer than database index)
+                  users.sort((a, b) {
+                    final nameA = (a.data() as Map)['firstName'] ?? '';
+                    final nameB = (b.data() as Map)['firstName'] ?? '';
+                    return nameA.toString().compareTo(nameB.toString());
+                  });
+
+                  if (users.isEmpty) {
+                    return const Text('No other users found.');
+                  }
 
                   List<DropdownMenuItem<String>> patientItems =
-                      snapshot.data!.docs.map((doc) {
+                      users.map((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     final name = '${data['firstName']} ${data['lastName']}';
+                    final role = data['role'] ?? 'User';
                     return DropdownMenuItem<String>(
-                        value: doc.id, child: Text(name));
+                        value: doc.id, child: Text('$name ($role)'));
                   }).toList();
 
                   return DropdownButtonFormField<String>(
@@ -202,7 +221,7 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
                     onChanged: (value) =>
                         setState(() => _selectedPatientId = value),
                     decoration: const InputDecoration(
-                      labelText: 'Patient Name',
+                      labelText: 'Search User',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.person_search_outlined),
                     ),
@@ -211,6 +230,7 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
                   );
                 },
               ),
+
               const SizedBox(height: 24),
               const Divider(),
               const SizedBox(height: 16),
@@ -218,20 +238,18 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 16),
 
-              // --- NEW: Dynamic List of Medication Fields ---
+              // --- Dynamic List of Medication Fields ---
               ListView.builder(
-                shrinkWrap: true, // Important inside SingleChildScrollView
-                physics:
-                    const NeverScrollableScrollPhysics(), // Disable internal scrolling
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
                 itemCount: _medicationEntries.length,
                 itemBuilder: (context, index) {
                   return _buildMedicationRow(index);
                 },
               ),
-              // --- End of Dynamic List ---
 
               const SizedBox(height: 16),
-              // --- NEW: Add Medication Button ---
+              // --- Add Medication Button ---
               OutlinedButton.icon(
                 icon: const Icon(Icons.add),
                 label: const Text('Add Medication'),
@@ -242,13 +260,12 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
-              // --- End of Add Button ---
 
               const SizedBox(height: 24),
               const Divider(),
               const SizedBox(height: 16),
 
-              // --- Notes Field (no change) ---
+              // --- Notes Field ---
               TextFormField(
                 controller: _notesController,
                 decoration: const InputDecoration(
@@ -258,12 +275,10 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
                   prefixIcon: Icon(Icons.notes_outlined),
                 ),
                 maxLines: 4,
-                // Make general notes optional
-                // validator: (value) => (value == null || value.isEmpty) ? 'Please enter instructions' : null,
               ),
               const SizedBox(height: 32),
 
-              // --- Save Button (no change) ---
+              // --- Save Button ---
               ElevatedButton.icon(
                 onPressed: _isLoading ? null : _savePrescription,
                 icon: _isLoading
@@ -289,7 +304,7 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
     );
   }
 
-  // --- NEW: Widget to build one row of medication/dosage fields ---
+  // --- Widget to build one row of medication/dosage fields ---
   Widget _buildMedicationRow(int index) {
     MedicationEntry entry = _medicationEntries[index];
     return Padding(
@@ -298,7 +313,7 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            flex: 3, // Medication field takes more space
+            flex: 3,
             child: TextFormField(
               controller: entry.medicationController,
               decoration: InputDecoration(
@@ -312,7 +327,7 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            flex: 2, // Dosage field takes less space
+            flex: 2,
             child: TextFormField(
               controller: entry.dosageController,
               decoration: const InputDecoration(
@@ -324,7 +339,7 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
                   (value == null || value.isEmpty) ? 'Required' : null,
             ),
           ),
-          // Remove button (only show if not the first item)
+          // Remove button
           if (_medicationEntries.length > 1)
             IconButton(
               icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
@@ -332,10 +347,9 @@ class _WritePrescriptionPageState extends State<WritePrescriptionPage> {
               tooltip: 'Remove Medication',
             )
           else
-            const SizedBox(width: 48), // Keep alignment if only one item
+            const SizedBox(width: 48),
         ],
       ),
     );
   }
-  // --- End of new widget ---
 }

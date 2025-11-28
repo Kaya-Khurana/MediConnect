@@ -1,12 +1,12 @@
-// lib/my_prescriptions_page.dart
-import 'dart:typed_data'; // Needed for PDF data
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:mediconnect/auth_service.dart';
 import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart'; // PDF package
-import 'package:pdf/widgets.dart' as pw; // PDF package (aliased)
-import 'package:printing/printing.dart'; // Printing package
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:mediconnect/constants.dart';
 
 class MyPrescriptionsPage extends StatelessWidget {
   MyPrescriptionsPage({super.key});
@@ -19,115 +19,245 @@ class MyPrescriptionsPage extends StatelessWidget {
       BuildContext context, Map<String, dynamic> data) async {
     final pdf = pw.Document();
 
-    // Extract data for PDF
+    // Load Logo Image
+    final logoImage = pw.MemoryImage(
+      (await DefaultAssetBundle.of(context).load(AppConstants.appLogo))
+          .buffer
+          .asUint8List(),
+    );
+
+    // Extract data
     final doctorName = data['doctorName'] ?? 'Unknown Doctor';
-    final patientName =
-        data['patientName'] ?? 'Patient Name Unknown'; // Get patient name
+
+    // --- FIX: Robust Patient Name Check ---
+    // 1. Try to get name from the prescription doc
+    // 2. If missing, use a default string (or you could fetch the user doc here)
+    final patientName = data['patientName'] ?? 'Patient';
+
     final List<dynamic> medicationsList = data['medications'] ?? [];
     final notes = data['notes'] ?? 'No additional notes';
     final issuedAt = (data['issuedAt'] as Timestamp?)?.toDate();
     final formattedDate = issuedAt != null
-        ? DateFormat('EEE, MMM d, yyyy').format(issuedAt)
+        ? DateFormat('MMM d, yyyy').format(issuedAt)
         : 'Date unknown';
+    final formattedTime =
+        issuedAt != null ? DateFormat('h:mm a').format(issuedAt) : '';
 
-    // Build the PDF content
+    // Define colors
+    final PdfColor primaryColor = PdfColor.fromHex("#42A5F5");
+    final PdfColor lightBgColor = PdfColor.fromHex("#E3F2FD");
+    final PdfColor darkTextColor = PdfColors.black;
+    final PdfColor lightTextColor = PdfColors.grey600;
+
+    // Build PDF
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(35),
         build: (pw.Context pdfContext) {
-          return pw.Padding(
-            padding: const pw.EdgeInsets.all(30),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                // Header
-                pw.Header(
-                  level: 0,
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text('MediConnect Prescription',
-                          style: pw.TextStyle(
-                              fontSize: 24, fontWeight: pw.FontWeight.bold)),
-                      pw.Text(formattedDate,
-                          style: const pw.TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ),
-                pw.Divider(thickness: 2),
-                pw.SizedBox(height: 20),
-
-                // Patient and Doctor Info
-                pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text('Patient: $patientName',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Prescribed by: $doctorName',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                    ]),
-                pw.SizedBox(height: 30),
-
-                // Medications Table
-                pw.Text('Medications:',
-                    style: pw.TextStyle(
-                        fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 10),
-                if (medicationsList.isNotEmpty)
-                  pw.Table.fromTextArray(
-                    headers: ['Medication', 'Dosage'],
-                    data: medicationsList.map((med) {
-                      final medMap = med as Map<String, dynamic>? ?? {};
-                      return [
-                        medMap['medication'] ?? 'N/A',
-                        medMap['dosage'] ?? 'N/A'
-                      ];
-                    }).toList(),
-                    border: pw.TableBorder.all(),
-                    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    cellAlignment: pw.Alignment.centerLeft,
-                    cellPadding: const pw.EdgeInsets.all(5),
-                  )
-                else
-                  pw.Text('No medications listed.'),
-                pw.SizedBox(height: 30),
-
-                // Notes
-                if (notes.isNotEmpty) ...[
-                  pw.Text('Notes / Instructions:',
-                      style: pw.TextStyle(
-                          fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                  pw.SizedBox(height: 5),
-                  pw.Text(notes),
+          const double spacing = 10;
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Image(logoImage, height: 45, width: 45),
+                        pw.SizedBox(width: spacing),
+                        pw.Text('MediConnect',
+                            style: pw.TextStyle(
+                                fontSize: 24,
+                                fontWeight: pw.FontWeight.bold,
+                                color: primaryColor)),
+                      ]),
+                  pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text('Prescription',
+                            style: pw.TextStyle(
+                                fontSize: 20,
+                                fontWeight: pw.FontWeight.bold,
+                                color: darkTextColor)),
+                        pw.SizedBox(height: 3),
+                        pw.Text(formattedDate,
+                            style: pw.TextStyle(
+                                fontSize: 11, color: lightTextColor)),
+                        if (formattedTime.isNotEmpty)
+                          pw.Text(formattedTime,
+                              style: pw.TextStyle(
+                                  fontSize: 11, color: lightTextColor)),
+                      ]),
                 ],
+              ),
+              pw.Divider(
+                  thickness: 1.5,
+                  color: PdfColors.grey300,
+                  height: spacing * 3),
 
-                pw.Spacer(), // Push footer to bottom
-                pw.Divider(),
-                pw.Text('This prescription was generated by MediConnect.',
-                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+              // Patient & Doctor Info
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                    horizontal: spacing * 1.5, vertical: spacing),
+                margin: const pw.EdgeInsets.only(bottom: spacing * 2),
+                decoration: pw.BoxDecoration(
+                  color: lightBgColor,
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('PATIENT',
+                                style: pw.TextStyle(
+                                    color: primaryColor,
+                                    fontSize: 9,
+                                    fontWeight: pw.FontWeight.bold)),
+                            pw.Text(patientName,
+                                style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.bold,
+                                    fontSize: 13,
+                                    color: darkTextColor)),
+                          ]),
+                      pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.end,
+                          children: [
+                            pw.Text('PRESCRIBED BY',
+                                style: pw.TextStyle(
+                                    color: primaryColor,
+                                    fontSize: 9,
+                                    fontWeight: pw.FontWeight.bold)),
+                            pw.Text(doctorName,
+                                style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.bold,
+                                    fontSize: 13,
+                                    color: darkTextColor)),
+                          ]),
+                    ]),
+              ),
+
+              // Medications
+              pw.Text('Medications',
+                  style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                      color: primaryColor)),
+              pw.SizedBox(height: spacing / 1.5),
+              if (medicationsList.isNotEmpty)
+                pw.Table(
+                    columnWidths: const {
+                      0: pw.FlexColumnWidth(3),
+                      1: pw.FlexColumnWidth(2),
+                    },
+                    border:
+                        pw.TableBorder.all(color: PdfColors.grey200, width: 1),
+                    children: [
+                      pw.TableRow(
+                          decoration: pw.BoxDecoration(color: primaryColor),
+                          children: [
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.symmetric(
+                                  horizontal: spacing, vertical: spacing / 2),
+                              child: pw.Text('Medication',
+                                  style: pw.TextStyle(
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: PdfColors.white,
+                                      fontSize: 11)),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.symmetric(
+                                  horizontal: spacing, vertical: spacing / 2),
+                              child: pw.Text('Dosage / Instructions',
+                                  style: pw.TextStyle(
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: PdfColors.white,
+                                      fontSize: 11)),
+                            ),
+                          ]),
+                      ...medicationsList.map((med) {
+                        final medMap = med as Map<String, dynamic>? ?? {};
+                        return pw.TableRow(children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.symmetric(
+                                horizontal: spacing, vertical: spacing / 1.5),
+                            child: pw.Text(medMap['medication'] ?? 'N/A',
+                                style: pw.TextStyle(
+                                    fontSize: 10, color: darkTextColor)),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.symmetric(
+                                horizontal: spacing, vertical: spacing / 1.5),
+                            child: pw.Text(medMap['dosage'] ?? 'N/A',
+                                style: pw.TextStyle(
+                                    fontSize: 10, color: darkTextColor)),
+                          ),
+                        ]);
+                      }).toList(),
+                    ])
+              else
+                pw.Container(),
+
+              pw.SizedBox(height: spacing * 2),
+
+              // Notes
+              if (notes.isNotEmpty) ...[
+                pw.Text('Additional Notes',
+                    style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: primaryColor)),
+                pw.SizedBox(height: spacing / 1.5),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(spacing),
+                  width: double.infinity,
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey200),
+                    borderRadius: pw.BorderRadius.circular(4),
+                    color: PdfColors.grey50,
+                  ),
+                  child: pw.Text(notes,
+                      style: pw.TextStyle(fontSize: 10, color: darkTextColor)),
+                ),
+                pw.SizedBox(height: spacing * 2),
               ],
-            ),
+
+              // Footer
+              pw.Spacer(),
+              pw.Divider(color: PdfColors.grey300, height: spacing),
+              pw.SizedBox(height: spacing / 2),
+              pw.Center(
+                child: pw.Text(
+                    'This is a digitally generated prescription from MediConnect.',
+                    style: pw.TextStyle(
+                        fontSize: 9,
+                        fontStyle: pw.FontStyle.italic,
+                        color: PdfColors.grey500)),
+              )
+            ],
           );
         },
       ),
     );
 
-    // Use the printing package to save or share the PDF
     try {
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
       );
     } catch (e) {
-      print("Error generating or saving PDF: $e");
+      print("Error generating PDF: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error generating PDF: $e'),
-          backgroundColor: Colors.red,
-        ),
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
-  // --- END OF PDF FUNCTION ---
 
   @override
   Widget build(BuildContext context) {
@@ -155,28 +285,22 @@ class MyPrescriptionsPage extends StatelessWidget {
           }
           if (snapshot.hasError) {
             if (snapshot.error.toString().contains('index')) {
-              // Show index error message
               return const Center(
                 child: Padding(
                   padding: EdgeInsets.all(24.0),
                   child: Text(
-                    'Firestore Error:\n\nThe required index for this query is missing.\n\nPlease check the VS Code DEBUG CONSOLE for a link to create it automatically in Firebase.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.red, fontSize: 16),
-                  ),
+                      'Firestore Error: Index missing. Check Debug Console.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.red)),
                 ),
               );
             }
             return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            // Show no prescriptions message
             return const Center(
-              child: Text(
-                'You have no prescriptions.',
-                style: TextStyle(fontSize: 18, color: Colors.grey),
-              ),
-            );
+                child: Text('You have no prescriptions.',
+                    style: TextStyle(fontSize: 18, color: Colors.grey)));
           }
 
           final prescriptions = snapshot.data!.docs;
@@ -188,8 +312,12 @@ class MyPrescriptionsPage extends StatelessWidget {
               final doc = prescriptions[index];
               final data = doc.data() as Map<String, dynamic>;
 
-              // Extract prescription details
+              // --- Get Doctor Name ---
               final doctorName = data['doctorName'] ?? 'Unknown Doctor';
+
+              // --- FIX: Get Patient Name Safely ---
+              final patientName = data['patientName'] ?? 'Patient';
+
               final List<dynamic> medicationsList = data['medications'] ?? [];
               final notes = data['notes'] ?? 'No additional notes';
               final issuedAt = (data['issuedAt'] as Timestamp?)?.toDate();
@@ -200,8 +328,7 @@ class MyPrescriptionsPage extends StatelessWidget {
               return Card(
                 elevation: 3.0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
+                    borderRadius: BorderRadius.circular(12.0)),
                 margin: const EdgeInsets.only(bottom: 16.0),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -213,11 +340,9 @@ class MyPrescriptionsPage extends StatelessWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              'Prescription', // Main title
+                              'Prescription',
                               style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
+                                  fontWeight: FontWeight.bold, fontSize: 18),
                             ),
                           ),
                           Text(
@@ -231,13 +356,18 @@ class MyPrescriptionsPage extends StatelessWidget {
                       Text(
                         'Prescribed by: $doctorName',
                         style: TextStyle(
-                          color: Theme.of(context).primaryColor,
-                          fontWeight: FontWeight.w500,
-                        ),
+                            color: Theme.of(context).primaryColor,
+                            fontWeight: FontWeight.w500),
                       ),
+                      // --- FIX: Display Patient Name on UI Card ---
+                      const SizedBox(height: 4),
+                      Text(
+                        'For: $patientName',
+                        style: TextStyle(color: Colors.grey[800], fontSize: 13),
+                      ),
+
                       const Divider(height: 20),
 
-                      // Loop through and display medications
                       if (medicationsList.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,14 +401,11 @@ class MyPrescriptionsPage extends StatelessWidget {
                         const Text('Notes:',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
-                        Text(
-                          notes,
-                          style:
-                              TextStyle(fontSize: 14, color: Colors.grey[700]),
-                        ),
+                        Text(notes,
+                            style: TextStyle(
+                                fontSize: 14, color: Colors.grey[700])),
                       ],
 
-                      // --- THIS IS THE SAVE PDF BUTTON ---
                       const SizedBox(height: 16),
                       Align(
                         alignment: Alignment.centerRight,
@@ -288,11 +415,9 @@ class MyPrescriptionsPage extends StatelessWidget {
                           label: Text('Save as PDF',
                               style: TextStyle(
                                   color: Theme.of(context).primaryColor)),
-                          // --- Make sure onPressed calls the function ---
                           onPressed: () => _generateAndSavePdf(context, data),
                         ),
                       ),
-                      // --- END OF BUTTON ---
                     ],
                   ),
                 ),
